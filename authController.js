@@ -2,8 +2,18 @@ const User = require('./models/User');
 const Role = require('./models/Role');
 const bcrypt = require('bcrypt');
 
-const { validationResult } = require('express-validator');
+const jwt = require('jsonwebtoken');
 
+const { validationResult } = require('express-validator');
+const { secret } = require('./config');
+
+const generateAccessToken = (id, roles) => {
+  const payload = {
+    id,
+    roles,
+  };
+  return jwt.sign(payload, secret, { expiresIn: '24h' });
+};
 class authController {
   async registration(req, res) {
     try {
@@ -22,7 +32,6 @@ class authController {
       const saltRounds = 10;
 
       bcrypt.hash(password, saltRounds, async function (err, hash) {
-        // Store hash in your password DB.
         if (err) {
           throw err;
         }
@@ -40,16 +49,34 @@ class authController {
       res.status(400).json({ message: 'Registration error' });
     }
   }
+
   async login(req, res) {
     try {
+      const { username, password } = req.body;
+      const user = await User.findOne({ username });
+      if (!user) {
+        return res
+          .status(400)
+          .json({ message: `User ${username} does not exist` });
+      }
+
+      const validPassword = await bcrypt.compare(password, user.password);
+
+      if (!validPassword) {
+        return res.status(400).json({ message: `Password not valid` });
+      }
+      const token = generateAccessToken(user._id, user.roles);
+      return res.json({ token });
     } catch (e) {
       console.log(e);
       res.status(400).json({ message: 'Login error' });
     }
   }
+
   async getUsers(req, res) {
     try {
-      res.json('server is work!');
+      const users = await User.find();
+      res.json(users);
     } catch (e) {
       console.log(e);
     }
